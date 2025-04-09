@@ -1,45 +1,20 @@
 """
-llama_personalization
-====================
-
-A privacy-focused personalization engine for language models that uses federated learning,
-differential privacy, secure enclaves, and homomorphic encryption.
+LlamaPersonalization - Toolkit for personalized experiences.
 """
 
-__version__ = "0.1.0"
+from .core import PersonalizationClient
+from .config import PersonalizationConfig
+from .types import UserProfile, RecommendationResult # Import from types.py
+# Placeholder types - consider moving to a types.py if complex - REMOVED
+# from .core import UserProfile, RecommendationResult 
+# Engine is internal for now
+# from .engine import PersonalizationEngine 
 
-from .agent import Agent
-from .config import (
-    Config,
-    ConfigError,
-    FederatedConfig,
-    ModelConfig,
-    PrivacyConfig,
-    SecurityConfig,
-)
-from .core_ml import CoreMLPrivateInterface
-from .differential_privacy import DifferentialPrivacy
-from .explainable_recommender import ExplainableRecommender
-from .federated_learning import FederatedLearningEnv
-from .homomorphic_encryption import MLXHomomorphicEncryption
-from .lora_adapter import LoRAAdapter
-from .personalization_engine import PersonalizationEngine
-from .secure_enclave import SecureEnclaveSimulation
+__version__ = "0.1.0" # Keep version at 0.1.0 for now
 
 __all__ = [
-    "Config",
-    "PrivacyConfig",
-    "FederatedConfig",
-    "ModelConfig",
-    "SecurityConfig",
-    "ConfigError",
-    "SecureEnclaveSimulation",
-    "DifferentialPrivacy",
-    "MLXHomomorphicEncryption",
-    "CoreMLPrivateInterface",
-    "LoRAAdapter",
-    "FederatedLearningEnv",
-    "Agent",
-    "ExplainableRecommender",
-    "PersonalizationEngine",
+    "PersonalizationClient",
+    "PersonalizationConfig",
+    "UserProfile",             # Export placeholder type
+    "RecommendationResult",    # Export placeholder type
 ]

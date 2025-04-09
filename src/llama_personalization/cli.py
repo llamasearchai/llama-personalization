@@ -6,234 +6,114 @@ Command-line interface for llama_personalization.
 import argparse
 import json
 import logging
-import os
 import sys
+from typing import Dict, Any
 
-from llama_personalization import PersonalizationEngine
+# Use the client, not the engine directly
+from llama_personalization.core import PersonalizationClient
 
 logger = logging.getLogger("llama_personalization.cli")
 
-
-def setup_logging(log_level: str = "INFO") -> None:
-    """
-    Set up logging configuration.
-
-    Args:
-        log_level: Logging level.
-    """
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+def setup_logging(log_level_str: str = "INFO") -> None:
+    """Set up logging configuration."""
+    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+    # Configure root logger for the package
+    pkg_logger = logging.getLogger("llama_personalization")
+    pkg_logger.setLevel(log_level)
+    if not pkg_logger.hasHandlers():
+         handler = logging.StreamHandler(sys.stdout)
+         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+         handler.setFormatter(formatter)
+         pkg_logger.addHandler(handler)
+         pkg_logger.propagate = False # Prevent duplication if root logger also gets configured
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    Parse command-line arguments.
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Llama Personalization Client CLI")
 
-    Returns:
-        Parsed arguments.
-    """
-    parser = argparse.ArgumentParser(description="Privacy-focused personalization engine")
-
-    parser.add_argument("--config", help="Path to configuration file", default=None)
-
+    # Removed --config argument for now
     parser.add_argument(
-        "--log-level",
+        "-l", "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
-        help="Logging level",
+        help="Set the logging level.",
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run", required=True)
 
-    # Train command
-    train_parser = subparsers.add_parser("train", help="Train the federated model")
-    train_parser.add_argument(
-        "--rounds", type=int, help="Number of rounds to train for", default=None
-    )
+    # Get Recommendations command
+    rec_parser = subparsers.add_parser("get-recommendations", help="Get personalized recommendations for a user.")
+    rec_parser.add_argument("-u", "--user-id", required=True, help="The ID of the user.")
+    rec_parser.add_argument("-c", "--context", type=json.loads, default={}, help='Contextual information as a JSON string (e.g., '{"page": "home"}').')
+    rec_parser.add_argument("-n", "--num-recs", type=int, default=10, help="Number of recommendations to retrieve.")
 
-    # Simulate command
-    simulate_parser = subparsers.add_parser(
-        "simulate", help="Simulate a federated learning environment"
-    )
-    simulate_parser.add_argument(
-        "--clients", type=int, help="Number of clients to simulate", default=10
-    )
-    simulate_parser.add_argument(
-        "--rounds", type=int, help="Number of rounds to train for", default=5
-    )
+    # Update Profile command
+    update_parser = subparsers.add_parser("update-profile", help="Update a user's profile.")
+    update_parser.add_argument("-u", "--user-id", required=True, help="The ID of the user whose profile to update.")
+    update_parser.add_argument("-d", "--data", type=json.loads, required=True, help='Profile data as a JSON string (e.g., '{"interests": ["ai", "python"]}').')
 
-    # Explain command
-    explain_parser = subparsers.add_parser("explain", help="Generate GDPR-compliant explanation")
-    explain_parser.add_argument("--client", help="Client ID to explain", required=True)
-
-    # Export command
-    export_parser = subparsers.add_parser(
-        "export", help="Export user data (GDPR right to data portability)"
-    )
-    export_parser.add_argument("--client", help="Client ID to export", required=True)
-    export_parser.add_argument("--output", help="Output file path", default=None)
-
-    # Delete command
-    delete_parser = subparsers.add_parser(
-        "delete", help="Delete user data (GDPR right to be forgotten)"
-    )
-    delete_parser.add_argument("--client", help="Client ID to delete", required=True)
-    delete_parser.add_argument("--confirm", action="store_true", help="Confirm deletion")
+    # Removed train, simulate, explain, export, delete commands
 
     return parser.parse_args()
 
-
-def run_train(args: argparse.Namespace) -> None:
-    """
-    Run the train command.
-
-    Args:
-        args: Command-line arguments.
-    """
-    engine = PersonalizationEngine(args.config)
-    engine.train_federated(args.rounds)
-    engine.save_global_model()
-    logger.info("Training completed successfully")
-
-
-def run_simulate(args: argparse.Namespace) -> None:
-    """
-    Run the simulate command.
-
-    Args:
-        args: Command-line arguments.
-    """
-    # Initialize personalization engine
-    engine = PersonalizationEngine(args.config)
-
-    # Add simulated clients
-    for i in range(args.clients):
-        client_id = f"client_{i}"
-        engine.add_client(client_id)
-
-        # Add some random preferences
-        import random
-
-        preferences = {
-            "topics": random.sample(
-                ["technology", "science", "art", "sports", "music", "food", "travel"],
-                random.randint(1, 3),
-            ),
-            "language": random.choice(["en", "fr", "es", "de"]),
-            "content_length": random.choice(["short", "medium", "long"]),
-        }
-        engine.update_client_preferences(client_id, preferences)
-
-    # Train the federated model
-    engine.train_federated(args.rounds)
-
-    # Save the global model
-    engine.save_global_model()
-
-    # Print summary
-    logger.info(f"Simulation completed with {args.clients} clients and {args.rounds} rounds")
-    logger.info(
-        f"Global model saved to {os.path.join(engine.config.storage_path, 'global_model.json')}"
-    )
-
-
-def run_explain(args: argparse.Namespace) -> None:
-    """
-    Run the explain command.
-
-    Args:
-        args: Command-line arguments.
-    """
-    engine = PersonalizationEngine(args.config)
-
+def run_get_recommendations(args: argparse.Namespace, client: PersonalizationClient) -> None:
+    """Run the get-recommendations command."""
+    logger.info(f"Requesting recommendations for user: {args.user_id}")
     try:
-        explanation = engine.get_gdpr_explanation(args.client)
-        print(json.dumps(explanation, indent=2))
+        recommendations = client.get_recommendations(
+            user_id=args.user_id,
+            context=args.context,
+            num_recommendations=args.num_recs
+        )
+        print(json.dumps(recommendations, indent=2))
+        if recommendations.get("error"):
+            sys.exit(1) # Exit with error if the client reported one
     except Exception as e:
-        logger.error(f"Failed to get explanation: {e}")
+        logger.error(f"Failed to get recommendations: {e}", exc_info=True)
+        print(json.dumps({"error": str(e)}, indent=2), file=sys.stderr)
         sys.exit(1)
 
-
-def run_export(args: argparse.Namespace) -> None:
-    """
-    Run the export command.
-
-    Args:
-        args: Command-line arguments.
-    """
-    engine = PersonalizationEngine(args.config)
-
+def run_update_profile(args: argparse.Namespace, client: PersonalizationClient) -> None:
+    """Run the update-profile command."""
+    logger.info(f"Requesting profile update for user: {args.user_id}")
+    
+    # Ensure user_id from arg matches data if present, or add it
+    profile_data = args.data
+    if "user_id" in profile_data and profile_data["user_id"] != args.user_id:
+        logger.error(f"User ID mismatch: Argument '{args.user_id}' does not match ID in data '{profile_data['user_id']}'.")
+        sys.exit(1)
+    elif "user_id" not in profile_data:
+         profile_data["user_id"] = args.user_id
+    
     try:
-        user_data = engine.export_client_data(args.client)
-
-        if not user_data:
-            logger.error(f"No data found for client {args.client}")
-            sys.exit(1)
-
-        if args.output:
-            with open(args.output, "w") as f:
-                json.dump(user_data, f, indent=2)
-            logger.info(f"User data exported to {args.output}")
-        else:
-            print(json.dumps(user_data, indent=2))
+        result = client.update_profile(profile_data=profile_data)
+        print(json.dumps(result, indent=2))
+        if not result.get("success"):
+            sys.exit(1) # Exit with error if the client reported failure
     except Exception as e:
-        logger.error(f"Failed to export user data: {e}")
+        logger.error(f"Failed to update profile: {e}", exc_info=True)
+        print(json.dumps({"error": str(e)}, indent=2), file=sys.stderr)
         sys.exit(1)
-
-
-def run_delete(args: argparse.Namespace) -> None:
-    """
-    Run the delete command.
-
-    Args:
-        args: Command-line arguments.
-    """
-    if not args.confirm:
-        logger.error("Please confirm deletion with --confirm flag")
-        sys.exit(1)
-
-    engine = PersonalizationEngine(args.config)
-
-    try:
-        success = engine.delete_client_data(args.client)
-
-        if success:
-            logger.info(f"Data for client {args.client} deleted successfully")
-        else:
-            logger.error(f"Failed to delete data for client {args.client}")
-            sys.exit(1)
-    except Exception as e:
-        logger.error(f"Failed to delete user data: {e}")
-        sys.exit(1)
-
 
 def main() -> None:
     """Main entry point for the CLI."""
     args = parse_args()
-
-    # Set up logging
     setup_logging(args.log_level)
 
-    # Set environment variable for logging level
-    os.environ["LLAMA_LOG_LEVEL"] = args.log_level
+    # Initialize the client (using default config for now)
+    # TODO: Potentially allow config overrides via CLI flags or env vars if needed later
+    client = PersonalizationClient()
 
     # Run the appropriate command
-    if args.command == "train":
-        run_train(args)
-    elif args.command == "simulate":
-        run_simulate(args)
-    elif args.command == "explain":
-        run_explain(args)
-    elif args.command == "export":
-        run_export(args)
-    elif args.command == "delete":
-        run_delete(args)
+    if args.command == "get-recommendations":
+        run_get_recommendations(args, client)
+    elif args.command == "update-profile":
+        run_update_profile(args, client)
     else:
-        logger.error("No command specified. Run with --help for usage information.")
+        # Should not happen due to `required=True` in add_subparsers
+        logger.error(f"Unknown command: {args.command}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
